@@ -11,6 +11,24 @@
             :aot :all
             :main sparkling.example.tfidf
 
+            :profiles {:gorilla {:dependencies [[gorilla-renderable "1.0.0"]
+                                                [cider/cider-nrepl "0.8.2"]
+                                                [org.clojure/tools.nrepl "0.2.5"]
+                                                [gorilla-repl "0.3.4" :exclusions [org.clojure/clojure
+                                                                                   http-kit
+                                                                                   ring/ring-json
+                                                                                   cheshire
+                                                                                   compojure
+                                                                                   org.slf4j/slf4j-api
+                                                                                   ch.qos.logback/logback-classic
+                                                                                   gorilla-renderable
+                                                                                   org.clojure/data.codec
+                                                                                   javax.servlet/servlet-api
+                                                                                   grimradical/clj-semver
+                                                                                   clojure-complete]
+                                                 ]]
+                                 :plugins      [[lein-gorilla "0.3.4"]]
+                                 :repl-options {:nrepl-handler sparkling.nrepl/handler}}}
             :javac-options ["-Xlint:unchecked" "-source" "1.6" "-target" "1.6"]
             :jvm-opts ^:replace ["-server" "-Xmx1g"]
             :global-vars {*warn-on-reflection* false}
@@ -20,3 +38,14 @@
 ;;     lein run
 
 
+
+
+;; First: Start an nrepl-server
+;; lein do clean, with-profile +gorilla repl :headless :port 9001
+
+;; Then, start a gorilla repl
+;; lein with-profile +gorilla gorilla :nrepl-port 9001  :port 9000
+
+
+;; and open the Gorilla REPL in your browser
+;; open http://127.0.0.1:9000/worksheet.html?filename=easy-report

@@ -83,6 +83,6 @@
            spark/collect
            ((partial sort-by last >))
            (take 10)
-           clojure.pprint/pprint))
+           ))
     (catch Exception e
       (println (.printStackTrace e)))))
