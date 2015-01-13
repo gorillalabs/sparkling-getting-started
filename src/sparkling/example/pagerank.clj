@@ -42,9 +42,12 @@
 
           ;; sample urls and links
           pages [(spark/tuple "url1" "url2")
-                 (spark/tuple "url2" "url4")
-                 (spark/tuple "url3" "url2")
-                 (spark/tuple "url4" "url3")]
+                 (spark/tuple "url2" "url3")
+                 (spark/tuple "url3" "url4")
+                 (spark/tuple "url4" "url1")
+                 (spark/tuple "url1" "url3")
+                 (spark/tuple "url4" "url3")
+                 ]
 
           links (-> (spark/parallelize-pairs sc pages)
                     (spark/group-by-key)
