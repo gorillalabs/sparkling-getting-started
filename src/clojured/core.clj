@@ -58,6 +58,19 @@
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; In Practice 5: top-errors
+
+(defn top-errors [lines]
+  (->> lines
+       (map parse-line)
+       (filter (fn [entry] (not= "200" (:status entry))))
+       (map (fn [entry] [(:uri entry) 1]))
+       (reduce (fn [a [k v]] (update-in a [k] #((fnil + 0) % v))) {})
+       (sort-by val >)
+       (take 10)))
+
+#_ (process top-errors)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -104,6 +117,41 @@
 
 #_
 (process* group-by-status-code*)
+
+
+
+
+(defn top-errors* [lines]
+  (-> lines
+      (spark/map parse-line)
+      (spark/filter (fn [entry] (not= "200" (:status entry))))
+      (spark/rdd-name "only-ok")
+      spark/cache
+      (spark/map-to-pair (fn [entry] (spark/tuple (:uri entry) 1)))
+      (spark/reduce-by-key +)
+      (spark/rdd-name "count-by-url")
+      ;; flip
+      (spark/map-to-pair (s-de/key-value-fn (fn [a b] (spark/tuple b a))))
+      (spark/sort-by-key false) ;; descending order
+      ;; flip
+      (spark/map-to-pair (s-de/key-value-fn (fn [a b] (spark/tuple b a))))
+      (spark/map (s-de/key-value-fn vector))
+      (spark/take 10)))
+
+#_
+(process* top-errors*)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
