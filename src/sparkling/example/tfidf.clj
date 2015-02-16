@@ -1,5 +1,5 @@
 (ns sparkling.example.tfidf
-  (:require [sparkling.api :as spark]
+  (:require [sparkling.core :as spark]
             [sparkling.destructuring :as s-de]
             [sparkling.debug :as s-dbg]
             [sparkling.conf :as conf])
@@ -47,36 +47,36 @@
           _ (s-dbg/inspect doc-data "doc-data")
 
           ;; stopword filtered RDD of [doc-id term term-freq doc-terms-count] tuples
-          doc-term-seq (-> doc-data
+          doc-term-seq (->> doc-data
                            (spark/flat-map-to-pair (s-de/key-value-fn gen-docid-term-tuples))
-                           (s-dbg/inspect "doc-term-seq")
+                           #_ (s-dbg/inspect "doc-term-seq")
                            spark/cache)
 
           ;; RDD of term-frequency tuples: [term [doc-id tf]]
           ;; where tf is per document, that is, tf(term, document)
-          tf-by-doc (-> doc-term-seq
+          tf-by-doc (->> doc-term-seq
                         (spark/map-to-pair (s-de/key-value-fn (fn [doc-id [term term-freq doc-terms-count]]
                                      (spark/tuple term [doc-id (double (/ term-freq doc-terms-count))]))))
-                        (s-dbg/inspect "tf-by-doc")
+                        #_(s-dbg/inspect "tf-by-doc")
                         spark/cache)
 
           ;; total number of documents in corpus
           num-docs (spark/count doc-data)
 
           ;; idf of terms, that is, idf(term)
-          idf-by-term (-> doc-term-seq
+          idf-by-term (->> doc-term-seq
                           (spark/group-by (s-de/key-value-fn (fn [_ [term _ _]] term)))
-                          (s-dbg/inspect "in idf-by-term (1)")
+                          #_(s-dbg/inspect "in idf-by-term (1)")
                           (spark/map-to-pair (s-de/key-value-fn (calc-idf num-docs)))
-                          (s-dbg/inspect "in idf-by-term (2)")
+                          #_(s-dbg/inspect "in idf-by-term (2)")
                           spark/cache)
 
           ;; tf-idf of terms, that is, tf(term, document) x idf(term)
-          tfidf-by-term (-> (spark/join tf-by-doc idf-by-term)
-                            (s-dbg/inspect "in tfidf-by-term (1)")
+          tfidf-by-term (->> (spark/join tf-by-doc idf-by-term)
+                            #_(s-dbg/inspect "in tfidf-by-term (1)")
                             (spark/map (s-de/key-val-val-fn (fn [term [doc-id tf] idf]
                                          [doc-id term (* tf idf)])))
-                            (s-dbg/inspect "in tfidf-by-term (2)")
+                            #_(s-dbg/inspect "in tfidf-by-term (2)")
                             spark/cache)
           ]
       (->> tfidf-by-term
