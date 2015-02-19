@@ -1,41 +1,54 @@
-(ns sparkling.example.tfidf
+(ns tf-idf.core
   (:require [sparkling.core :as spark]
             [sparkling.destructuring :as s-de]
             [sparkling.debug :as s-dbg]
-            [sparkling.conf :as conf])
+            [sparkling.conf :as conf]
+            [clojure.string :as string])
   (:gen-class))
 
-(def master "local")
-(def conf {})
-(def env {})
 
 (def stopwords #{"a" "all" "and" "any" "are" "is" "in" "of" "on"
                  "or" "our" "so" "this" "the" "that" "to" "we"})
 
-;; Returns a stopword filtered seq of
-;; [doc-id term term-frequency doc-terms-count] tuples
-(defn gen-docid-term-tuples [doc-id content]
-  (let [terms (filter #(not (contains? stopwords %))
-                      (clojure.string/split content #" "))
+(defn terms [content]
+  (map string/lower-case (string/split content #" ")))
+
+(def remove-stopwords (partial remove (partial contains? stopwords)))
+
+
+
+
+(defn docid->term-tuples
+  "Returns a stopword filtered seq of tuples of doc-id,[term term-frequency doc-terms-count]"
+  [doc-id content]
+  (let [terms (remove-stopwords
+                (terms content))
         doc-terms-count (count terms)
         term-frequencies (frequencies terms)]
     (map (fn [term] (spark/tuple doc-id [term (term-frequencies term) doc-terms-count]))
          (distinct terms))))
 
-(defn calc-idf [doc-count]
-  (fn [term tuple-seq]
-    (let [df (count tuple-seq)]
-      (spark/tuple term (Math/log (/ doc-count (+ 1.0 df)))))))
+
+
+(defn idf [doc-count df]
+  (Math/log (/ doc-count (+ 1.0 df))))
+
+(defn term->idf [doc-count term tuple-seq]
+  (spark/tuple term (idf doc-count (count tuple-seq))))
+
+
+
+(defn spark-context [master]
+  (spark/spark-context (-> (conf/spark-conf)
+                           (conf/master master)
+                           (conf/app-name "tfidf")
+                           (conf/set "spark.akka.timeout" "300"))))
+
+
 
 (defn -main [& args]
   (try
-    (let [c (-> (conf/spark-conf)
-                (conf/master master)
-                (conf/app-name "tfidf")
-                (conf/set "spark.akka.timeout" "300")
-                (conf/set conf)
-                (conf/set-executor-env env))
-          sc (spark/spark-context c)
+    (let [sc (spark-context "local")
 
           ;; sample docs and terms
           documents [(spark/tuple "doc1" "Four score and seven years ago our fathers brought forth on this continent a new nation")
@@ -46,9 +59,9 @@
           doc-data (spark/parallelize-pairs sc documents)
           _ (s-dbg/inspect doc-data "doc-data")
 
-          ;; stopword filtered RDD of [doc-id term term-freq doc-terms-count] tuples
+          ;; stopword filtered RDD of doc-id -> [term term-freq doc-terms-count] tuples
           doc-term-seq (->> doc-data
-                           (spark/flat-map-to-pair (s-de/key-value-fn gen-docid-term-tuples))
+                           (spark/flat-map-to-pair (s-de/key-value-fn docid->term-tuples))
                            #_ (s-dbg/inspect "doc-term-seq")
                            spark/cache)
 
@@ -67,7 +80,7 @@
           idf-by-term (->> doc-term-seq
                           (spark/group-by (s-de/key-value-fn (fn [_ [term _ _]] term)))
                           #_(s-dbg/inspect "in idf-by-term (1)")
-                          (spark/map-to-pair (s-de/key-value-fn (calc-idf num-docs)))
+                          (spark/map-to-pair (s-de/key-value-fn (partial term->idf num-docs)))
                           #_(s-dbg/inspect "in idf-by-term (2)")
                           spark/cache)
 

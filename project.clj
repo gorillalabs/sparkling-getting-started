@@ -9,7 +9,7 @@
                            [org.apache.spark/spark-core_2.10 "1.1.0" :exclusions [com.thoughtworks.paranamer/paranamer]]
                            ]
             :aot :all
-            :main sparkling.example.tfidf
+            :main tf-idf.core
 
             :javac-options ["-Xlint:unchecked" "-source" "1.6" "-target" "1.6"]
             :jvm-opts ^:replace ["-server" "-Xmx1g"]

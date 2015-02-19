@@ -3,3 +3,4 @@ target
 .nrepl-port
 sparkling_getting_started.iml
 access.log
+.lein-failures
