@@ -8,7 +8,7 @@
                            [org.clojure/tools.logging "0.3.1"]
                            [clj-time "0.9.0"]]
             :main clojured.core
-            )
+            :profiles {:dev {:plugins [[lein-dotenv "RELEASE"]]}})
 
 ;; run example with
 ;;     lein run
