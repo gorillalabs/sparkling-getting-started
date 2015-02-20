@@ -59,6 +59,8 @@
 
 #_
 (process* line-count*)
+#_
+(clojure.java.browse/browse-url "http://localhost:4040/")
 
 
 (defn -main [& args]
