@@ -1,11 +1,12 @@
 (ns tf-idf.core
-  (:require [sparkling.core :as spark]
-            [sparkling.destructuring :as s-de]
-            [sparkling.debug :as s-dbg]
+  (:require [clojure.string :as string]
             [sparkling.conf :as conf]
-            [clojure.string :as string])
-  (:gen-class))
+            [sparkling.core :as spark]
+            [sparkling.destructuring :as s-de]))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Basic term handling functions
 
 (def stopwords #{"a" "all" "and" "any" "are" "is" "in" "of" "on"
                  "or" "our" "so" "this" "the" "that" "to" "we"})
@@ -13,89 +14,115 @@
 (defn terms [content]
   (map string/lower-case (string/split content #" ")))
 
-(def remove-stopwords (partial remove (partial contains? stopwords)))
+(def remove-stopwords  (partial remove (partial contains? stopwords)))
+
+
+(remove-stopwords (terms "A quick brown fox jumps"))
 
 
 
 
-(defn docid->term-tuples
-  "Returns a stopword filtered seq of tuples of doc-id,[term term-frequency doc-terms-count]"
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; tf / idf / tf*idf functions
+
+(defn idf [doc-count doc-count-for-term]
+  (Math/log (/ doc-count (+ 1.0 doc-count-for-term))))
+
+
+(System/getenv "SPARK_LOCAL_IP")
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Basic Spark management
+
+(defn make-spark-context []
+  (let [c (-> (conf/spark-conf)
+              (conf/master "local[*]")
+              (conf/app-name "tfidf"))]
+    (spark/spark-context c)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Basic data model generation functions
+(defn term-count-from-doc
+  "Returns a stopword filtered seq of tuples of doc-id,[term term-count doc-terms-count]"
   [doc-id content]
   (let [terms (remove-stopwords
                 (terms content))
         doc-terms-count (count terms)
-        term-frequencies (frequencies terms)]
-    (map (fn [term] (spark/tuple doc-id [term (term-frequencies term) doc-terms-count]))
+        term-count (frequencies terms)]
+    (map (fn [term] (spark/tuple [doc-id term] [(term-count term) doc-terms-count]))
          (distinct terms))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Spark Transformations / Actions
+
+(defn document-count [documents]
+  (spark/count documents))
+
+; (term-count-from-doc "doc1" "A quick brown fox")
 
 
-(defn idf [doc-count df]
-  (Math/log (/ doc-count (+ 1.0 df))))
+(defn term-count-by-doc-term [documents]
+  (->>
+    documents
+    (spark/flat-map-to-pair
+      (s-de/key-value-fn term-count-from-doc))
+    spark/cache))
 
-(defn term->idf [doc-count term tuple-seq]
-  (spark/tuple term (idf doc-count (count tuple-seq))))
+(defn document-count-by-term [document-term-count]
+  (->> document-term-count
+       (spark/map-to-pair (s-de/key-value-fn
+                            (fn [[_ term] [_ _]] (spark/tuple term 1))))
+       (spark/reduce-by-key +)))
+
+(defn idf-by-term [doc-count doc-count-for-term-rdd]
+  (spark/map-values (partial idf doc-count) doc-count-for-term-rdd))
+
+(defn tf-by-doc-term [document-term-count]
+  (spark/map-to-pair (s-de/key-value-fn
+                       (fn [[doc term] [term-count doc-terms-count]]
+                         (spark/tuple term [doc (/ term-count doc-terms-count)])))
+                     document-term-count))
 
 
+(defn tf-idf-by-doc-term [doc-count document-term-count term-idf]
+  (->> (spark/join (tf-by-doc-term document-term-count) term-idf)
+       (spark/map-to-pair (s-de/key-val-val-fn
+                            (fn [term [doc tf] idf]
+                              (spark/tuple [doc term] (* tf idf)))))
+       ))
 
-(defn spark-context [master]
-  (spark/spark-context (-> (conf/spark-conf)
-                           (conf/master master)
-                           (conf/app-name "tfidf")
-                           (conf/set "spark.akka.timeout" "300"))))
+
+(defn tf-idf [corpus]
+  (let [doc-count (document-count corpus)
+        document-term-count (term-count-by-doc-term corpus)
+        term-idf (idf-by-term doc-count (document-count-by-term document-term-count))]
+    (tf-idf-by-doc-term doc-count document-term-count term-idf)))
+
+(def tuple-swap (memfn ^scala.Tuple2 swap))
+
+(def swap-key-value (partial spark/map-to-pair tuple-swap))
+
+(defn sort-by-value [rdd]
+  (->> rdd
+       swap-key-value
+       (spark/sort-by-key compare false)
+       swap-key-value
+       ))
 
 
 
 (defn -main [& args]
-  (try
-    (let [sc (spark-context "local")
-
-          ;; sample docs and terms
-          documents [(spark/tuple "doc1" "Four score and seven years ago our fathers brought forth on this continent a new nation")
-                     (spark/tuple "doc2" "conceived in Liberty and dedicated to the proposition that all men are created equal")
-                     (spark/tuple "doc3" "Now we are engaged in a great civil war testing whether that nation or any nation so")
-                     (spark/tuple "doc4" "conceived and so dedicated can long endure We are met on a great battlefield of that war")]
-
-          doc-data (spark/parallelize-pairs sc documents)
-          _ (s-dbg/inspect doc-data "doc-data")
-
-          ;; stopword filtered RDD of doc-id -> [term term-freq doc-terms-count] tuples
-          doc-term-seq (->> doc-data
-                           (spark/flat-map-to-pair (s-de/key-value-fn docid->term-tuples))
-                           #_ (s-dbg/inspect "doc-term-seq")
-                           spark/cache)
-
-          ;; RDD of term-frequency tuples: [term [doc-id tf]]
-          ;; where tf is per document, that is, tf(term, document)
-          tf-by-doc (->> doc-term-seq
-                        (spark/map-to-pair (s-de/key-value-fn (fn [doc-id [term term-freq doc-terms-count]]
-                                     (spark/tuple term [doc-id (double (/ term-freq doc-terms-count))]))))
-                        #_(s-dbg/inspect "tf-by-doc")
-                        spark/cache)
-
-          ;; total number of documents in corpus
-          num-docs (spark/count doc-data)
-
-          ;; idf of terms, that is, idf(term)
-          idf-by-term (->> doc-term-seq
-                          (spark/group-by (s-de/key-value-fn (fn [_ [term _ _]] term)))
-                          #_(s-dbg/inspect "in idf-by-term (1)")
-                          (spark/map-to-pair (s-de/key-value-fn (partial term->idf num-docs)))
-                          #_(s-dbg/inspect "in idf-by-term (2)")
-                          spark/cache)
-
-          ;; tf-idf of terms, that is, tf(term, document) x idf(term)
-          tfidf-by-term (->> (spark/join tf-by-doc idf-by-term)
-                            #_(s-dbg/inspect "in tfidf-by-term (1)")
-                            (spark/map (s-de/key-val-val-fn (fn [term [doc-id tf] idf]
-                                         [doc-id term (* tf idf)])))
-                            #_(s-dbg/inspect "in tfidf-by-term (2)")
-                            spark/cache)
-          ]
-      (->> tfidf-by-term
-           spark/collect
-           ((partial sort-by last >))
-           (take 10)
-           clojure.pprint/pprint))
-    (catch Exception e
-      (println (.printStackTrace e)))))
+  (let [sc (make-spark-context)
+        documents
+        [(spark/tuple :doc1 "Four score and seven years ago our fathers brought forth on this continent a new nation")
+         (spark/tuple :doc2 "conceived in Liberty and dedicated to the proposition that all men are created equal")
+         (spark/tuple :doc3 "Now we are engaged in a great civil war testing whether that nation or any nation so")
+         (spark/tuple :doc4 "conceived and so dedicated can long endure We are met on a great battlefield of that war")]
+        corpus (spark/parallelize-pairs sc documents)
+        tf-idf (tf-idf corpus)]
+    (println (.toDebugString tf-idf))
+    (clojure.pprint/pprint (spark/collect tf-idf))
+    #_(clojure.pprint/pprint (spark/take 10 (sort-by-value tf-idf)))
+    ))
