@@ -6,7 +6,7 @@
             :dependencies [[org.clojure/clojure "1.6.0"]
                            [gorillalabs/sparkling "1.2.1-SNAPSHOT"]]
 
-            :aot [#".*" sparkling.serialization]
+            :aot [#".*" sparkling.serialization sparkling.destructuring]
             :main tf-idf.core
             :profiles {:provided {:dependencies [[org.apache.spark/spark-core_2.10 "1.3.1"]]}
                        :dev {:plugins [[lein-dotenv "RELEASE"]]}})
