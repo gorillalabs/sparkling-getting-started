@@ -4,4 +4,4 @@ jdk:
   - openjdk7
   - oraclejdk7
   - oraclejdk8
-script: "lein  do clean, test"
+script: "lein -U do clean, test"
