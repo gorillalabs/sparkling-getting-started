@@ -2,7 +2,8 @@
   (:require [clojure.string :as string]
             [sparkling.conf :as conf]
             [sparkling.core :as spark]
-            [sparkling.destructuring :as s-de]))
+            [sparkling.destructuring :as s-de])
+  (:gen-class))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

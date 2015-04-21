@@ -4,11 +4,12 @@
             :license {:name "Eclipse Public License"
                       :url  "http://www.eclipse.org/legal/epl-v10.html"}
             :dependencies [[org.clojure/clojure "1.6.0"]
-                           [gorillalabs/sparkling "1.2.1-SNAPSHOT"]
-                           [org.apache.spark/spark-core_2.10 "1.2.1"]]
+                           [gorillalabs/sparkling "1.2.1-SNAPSHOT"]]
+
             :aot [#".*" sparkling.serialization]
             :main tf-idf.core
-            :profiles {:dev {:plugins [[lein-dotenv "RELEASE"]]}})
+            :profiles {:provided {:dependencies [[org.apache.spark/spark-core_2.10 "1.3.1"]]}
+                       :dev {:plugins [[lein-dotenv "RELEASE"]]}})
 
 
 ;; run example with
