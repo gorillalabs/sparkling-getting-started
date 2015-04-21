@@ -1,9 +1,20 @@
 (ns tf-idf.core-test
+  (:import [org.apache.spark.serializer KryoSerializer]
+           [org.apache.spark.serializer KryoSerializerInstance])
   (:require [clojure.test :refer :all]
             [tf-idf.core :refer :all]
             [sparkling.core :as spark]
             [sparkling.conf :as conf]
-            [sparkling.destructuring :as s-de]))
+            [sparkling.destructuring :as s-de]
+            [sparkling.serialization :as requirered-to-have-serializer-class-ready]))
+
+
+(deftest sparkling-serialization
+  (testing "registrator"
+    (is (instance? KryoSerializerInstance
+                   (.newInstance (KryoSerializer. (-> (conf/spark-conf)
+                                                      (conf/master "local")
+                                                      )))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
