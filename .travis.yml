@@ -1,4 +1,5 @@
 language: clojure
+sudo: true
 lein: lein2
 jdk:
   - openjdk7
