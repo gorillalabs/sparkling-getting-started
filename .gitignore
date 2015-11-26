@@ -5,3 +5,4 @@ sparkling_getting_started.iml
 .gorilla-port
 access.log
 .lein-failures
+*.iml
