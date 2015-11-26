@@ -4,3 +4,4 @@ target
 sparkling_getting_started.iml
 access.log
 .lein-failures
+*.iml
