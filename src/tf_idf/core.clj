@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [sparkling.conf :as conf]
             [sparkling.core :as spark]
+            [sparkling.serialization]
             [sparkling.destructuring :as s-de])
   (:gen-class))
 
@@ -15,7 +16,7 @@
 (defn terms [content]
   (map string/lower-case (string/split content #" ")))
 
-(def remove-stopwords  (partial remove (partial contains? stopwords)))
+(def remove-stopwords (partial remove (partial contains? stopwords)))
 
 
 (remove-stopwords (terms "A quick brown fox jumps"))
@@ -116,11 +117,10 @@
 
 (defn -main [& args]
   (let [sc (make-spark-context)
-        documents
-        [(spark/tuple :doc1 "Four score and seven years ago our fathers brought forth on this continent a new nation")
-         (spark/tuple :doc2 "conceived in Liberty and dedicated to the proposition that all men are created equal")
-         (spark/tuple :doc3 "Now we are engaged in a great civil war testing whether that nation or any nation so")
-         (spark/tuple :doc4 "conceived and so dedicated can long endure We are met on a great battlefield of that war")]
+        documents [(spark/tuple :doc1 "Four score and seven years ago our fathers brought forth on this continent a new nation")
+                   (spark/tuple :doc2 "conceived in Liberty and dedicated to the proposition that all men are created equal")
+                   (spark/tuple :doc3 "Now we are engaged in a great civil war testing whether that nation or any nation so")
+                   (spark/tuple :doc4 "conceived and so dedicated can long endure We are met on a great battlefield of that war")]
         corpus (spark/parallelize-pairs sc documents)
         tf-idf (tf-idf corpus)]
     (println (.toDebugString tf-idf))
