@@ -1,0 +1,177 @@
+;; gorilla-repl.fileformat = 1
+
+;; **
+;;; # Using Spark Machine learning libraries
+;;; 
+;;; In this worksheet, we'll use Sparkling to load a dataset in the libSVM format, and then run typical machine learning tasks. 
+;;; 
+;;; Lets load the dependencies first 
+;;; 
+;; **
+
+;; @@
+(ns itchy-garden
+  (:require [sparkling.conf :as conf]
+            [sparkling.core :as s]
+            [sparkling.ml.core :as m]
+            [sparkling.ml.classification :as cl]
+            [sparkling.ml.transform :as xf]
+            [sparkling.ml.validation :as v])
+
+  (:import [org.apache.spark.api.java JavaSparkContext]
+           [org.apache.spark.sql DataFrame SQLContext]
+           [org.apache.spark.ml.classification NaiveBayes LogisticRegression
+            DecisionTreeClassifier RandomForestClassifier GBTClassifier ]
+           [java.io File]))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; Lets load a libsvm format dataset. This consists of about 3k instances, where each instance has a target variable with a value 0 or 1, and multiple continuous valued features. 
+;;; 
+;;; Note that Spark's implementation of ML libraries only works with *positive labels*, and datasets with labels in the 1,-1 range do not work out of the box, the labels need to be changed to positive.
+;; **
+
+;; @@
+(defn download-dataset
+  []
+  (let [svm-dataset-path
+        "http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/svmguide1"
+        tmpfile (.getPath (File/createTempFile "svmguide" "svm"))
+        _ (spit tmpfile (slurp svm-dataset-path))]
+    tmpfile))
+
+(def dataset-path (download-dataset))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;itchy-garden/dataset-path</span>","value":"#'itchy-garden/dataset-path"}
+;; <=
+
+;; **
+;;; ## Cross validation
+;;; 
+;;; We'll train a binary classifier on this dataset and evaluate its performance using cross validation, on the areaUnderROC curve metric.
+;;; 
+;;; This API uses the Ring middleware pattern to specify these artifacts:
+;;; 
+;;; * The handler itself is cross validation handler
+;;; * The add-dataset function takes a function which returns the dataset in a Spark DataFrame
+;;; * The estimator is the type of classifier or regressor used. In this case, we'll use a logistic regression classifier.
+;;; * The evaluator in this case is a binary classification evaluator. If we have a multi-class classification problem, a multi class evaluator will apply. The default metric for classification is area under the ROC curve.
+;;; 
+;;; The *run-pipeline* function will execute the handler and return the cross validated areaUnderROC metric.
+;; **
+
+;; @@
+(let [cvhand (-> m/cv-handler
+                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                 (m/add-estimator cl/logistic-regression)
+                 (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline cvhand))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.989250155930387)</span>","value":"(0.989250155930387)"}
+;; <=
+
+;; **
+;;; The previous example used the default options for logistic regression, as well as the evaluator. In the next example, we'll specify
+;;; 
+;;; * A hyperparameter for the classifier (elastic-net-param)
+;;; * A different evaluation metric for the evaluator (area under Precision recall curve) 
+;; **
+
+;; @@
+(let [cvhand (-> m/cv-handler
+                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                 (m/add-estimator cl/logistic-regression {:elastic-net-param 0.01})
+                 (m/add-evaluator v/binary-classification-evaluator {:metric-name "areaUnderPR"} ))]
+  (m/run-pipeline cvhand))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9941958048724657)</span>","value":"(0.9941958048724657)"}
+;; <=
+
+;; **
+;;; We could also change the parameters for the cross validation handler itself. Lets change the number of folds to 5 fold (from the default 3)
+;; **
+
+;; @@
+(let [cvhand (-> (partial m/cv-handler {:num-folds 5})
+                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                 (m/add-estimator cl/logistic-regression)
+                 (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline cvhand))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.98942973786373)</span>","value":"(0.98942973786373)"}
+;; <=
+
+;; **
+;;; ## Train-validation split
+;;; 
+;;; Instead of using cross validation, we could use a single fold and split the train-test set in terms of a percentage. 
+;;; 
+;;; We'll use a train-validation handler instead of a cross validation handler, while the rest of the parameters is unchanged.
+;; **
+
+;; @@
+(let [tvhand (-> m/tv-handler
+                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                 (m/add-estimator cl/logistic-regression)
+                 (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline tvhand))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9898523639038382)</span>","value":"(0.9898523639038382)"}
+;; <=
+
+;; **
+;;; Lets specify a different ratio of training to validation, where the training set is 60% and rest is validation set.
+;; **
+
+;; @@
+(let [tvhand (-> (partial m/tv-handler {:train-ratio 0.6} )
+                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                 (m/add-estimator cl/logistic-regression)
+                 (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline tvhand))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9905211655776786)</span>","value":"(0.9905211655776786)"}
+;; <=
+
+;; **
+;;; ## Grid search
+;;; 
+;;; Often classifiers use multiple hyperparameters, and we would like to find the values of hyperparameters that give the best classification scores. SparkML provides a grid search functionality for the same.
+;;; 
+;;; We'll assign a range of *regularization* values and find the cross validated scores for each value.
+;; **
+
+;; @@
+(defn addregularization
+  "sets the regularization parameters to search over"
+  [regparam est]
+  (v/param-grid [[(.regParam est) (double-array regparam)]]))
+
+(let [cvgrid (-> m/cv-handler
+                 ;;search for the best value for the regularization parameter 
+                 (m/add-grid-search (partial addregularization [0.1 0.05 0.01]))
+                 (m/add-evaluator v/binary-classification-evaluator)
+                 (m/add-estimator cl/logistic-regression)
+                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path)))]
+  (m/run-pipeline cvgrid))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9730089312309409 0.9773629797090069 0.9853807421182689)</span>","value":"(0.9730089312309409 0.9773629797090069 0.9853807421182689)"}
+;; <=
+
+;; **
+;;; The 3 scores correspond to the three values for regularization, and we can see that the last value (0.01) returns the best cross validated score on the AucROC metric.
+;; **
+
+;; @@
+
+;; @@
