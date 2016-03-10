@@ -54,9 +54,9 @@
 ;;; 
 ;;; We'll train a binary classifier on this dataset and evaluate its performance using cross validation, on the areaUnderROC curve metric.
 ;;; 
-;;; This API uses the Ring middleware pattern to specify these artifacts:
+;;; This API uses the middleware pattern (inspired by [Ring](https://github.com/ring-clojure/ring/wiki/Concepts)) to specify these artifacts:
 ;;; 
-;;; * The handler itself is cross validation handler
+;;; * The handler function does the cross validation 
 ;;; * The add-dataset function takes a function which returns the dataset in a Spark DataFrame
 ;;; * The estimator is the type of classifier or regressor used. In this case, we'll use a logistic regression classifier.
 ;;; * The evaluator in this case is a binary classification evaluator. If we have a multi-class classification problem, a multi class evaluator will apply. The default metric for classification is area under the ROC curve.
@@ -65,11 +65,11 @@
 ;; **
 
 ;; @@
-(let [cvhand (-> m/cv-handler
-                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
-                 (m/add-estimator cl/logistic-regression)
-                 (m/add-evaluator v/binary-classification-evaluator))]
-  (m/run-pipeline cvhand))
+(let [cvhandler (-> m/cv-handler
+                    (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                    (m/add-estimator cl/logistic-regression)
+                    (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline cvhandler))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-unkown'>(0.989250155930387)</span>","value":"(0.989250155930387)"}
@@ -83,11 +83,11 @@
 ;; **
 
 ;; @@
-(let [cvhand (-> m/cv-handler
-                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
-                 (m/add-estimator cl/logistic-regression {:elastic-net-param 0.01})
-                 (m/add-evaluator v/binary-classification-evaluator {:metric-name "areaUnderPR"} ))]
-  (m/run-pipeline cvhand))
+(let [cvhandler (-> m/cv-handler
+                    (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                    (m/add-estimator cl/logistic-regression {:elastic-net-param 0.01})
+                    (m/add-evaluator v/binary-classification-evaluator {:metric-name "areaUnderPR"} ))]
+  (m/run-pipeline cvhandler))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-unkown'>(0.9941958048724657)</span>","value":"(0.9941958048724657)"}
@@ -98,14 +98,14 @@
 ;; **
 
 ;; @@
-(let [cvhand (-> (partial m/cv-handler {:num-folds 5})
-                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
-                 (m/add-estimator cl/logistic-regression)
-                 (m/add-evaluator v/binary-classification-evaluator))]
-  (m/run-pipeline cvhand))
+(let [cvhandler (-> (partial m/cv-handler {:num-folds 5})
+                    (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                    (m/add-estimator cl/logistic-regression)
+                    (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline cvhandler))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-unkown'>(0.98942973786373)</span>","value":"(0.98942973786373)"}
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9894297378637298)</span>","value":"(0.9894297378637298)"}
 ;; <=
 
 ;; **
@@ -117,14 +117,14 @@
 ;; **
 
 ;; @@
-(let [tvhand (-> m/tv-handler
-                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
-                 (m/add-estimator cl/logistic-regression)
-                 (m/add-evaluator v/binary-classification-evaluator))]
-  (m/run-pipeline tvhand))
+(let [tvhandler (-> m/tv-handler
+                    (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                    (m/add-estimator cl/logistic-regression)
+                    (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline tvhandler))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-unkown'>(0.9898523639038382)</span>","value":"(0.9898523639038382)"}
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9919497271895795)</span>","value":"(0.9919497271895795)"}
 ;; <=
 
 ;; **
@@ -132,20 +132,20 @@
 ;; **
 
 ;; @@
-(let [tvhand (-> (partial m/tv-handler {:train-ratio 0.6} )
-                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
-                 (m/add-estimator cl/logistic-regression)
-                 (m/add-evaluator v/binary-classification-evaluator))]
-  (m/run-pipeline tvhand))
+(let [tvhandler (-> (partial m/tv-handler {:train-ratio 0.6} )
+                    (m/add-dataset (partial m/load-libsvm-dataset dataset-path))
+                    (m/add-estimator cl/logistic-regression)
+                    (m/add-evaluator v/binary-classification-evaluator))]
+  (m/run-pipeline tvhandler))
 ;; @@
 ;; =>
-;;; {"type":"html","content":"<span class='clj-unkown'>(0.9905211655776786)</span>","value":"(0.9905211655776786)"}
+;;; {"type":"html","content":"<span class='clj-unkown'>(0.9897219862173144)</span>","value":"(0.9897219862173144)"}
 ;; <=
 
 ;; **
 ;;; ## Grid search
 ;;; 
-;;; Often classifiers use multiple hyperparameters, and we would like to find the values of hyperparameters that give the best classification scores. SparkML provides a grid search functionality for the same.
+;;; Often classifiers use multiple hyperparameters, and we would like to find the values of hyperparameters that give the best classification scores. SparkML provides a grid search functionality for the same. See [link](http://scikit-learn.org/stable/modules/grid_search.html) for grid search in Scikit-learn
 ;;; 
 ;;; We'll assign a range of *regularization* values and find the cross validated scores for each value.
 ;; **
@@ -156,13 +156,13 @@
   [regparam est]
   (v/param-grid [[(.regParam est) (double-array regparam)]]))
 
-(let [cvgrid (-> m/cv-handler
-                 ;;search for the best value for the regularization parameter 
-                 (m/add-grid-search (partial addregularization [0.1 0.05 0.01]))
-                 (m/add-evaluator v/binary-classification-evaluator)
-                 (m/add-estimator cl/logistic-regression)
-                 (m/add-dataset (partial m/load-libsvm-dataset dataset-path)))]
-  (m/run-pipeline cvgrid))
+(let [cvhandler (-> m/cv-handler
+                    ;;search for the best value for the regularization parameter 
+                    (m/add-grid-search (partial addregularization [0.1 0.05 0.01]))
+                    (m/add-evaluator v/binary-classification-evaluator)
+                    (m/add-estimator cl/logistic-regression)
+                    (m/add-dataset (partial m/load-libsvm-dataset dataset-path)))]
+  (m/run-pipeline cvhandler))
 ;; @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-unkown'>(0.9730089312309409 0.9773629797090069 0.9853807421182689)</span>","value":"(0.9730089312309409 0.9773629797090069 0.9853807421182689)"}
