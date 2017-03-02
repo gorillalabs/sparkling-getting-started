@@ -4,7 +4,7 @@
             :license {:name "Eclipse Public License"
                       :url  "http://www.eclipse.org/legal/epl-v10.html"}
             :dependencies [[org.clojure/clojure "1.8.0"]
-                           [gorillalabs/sparkling "2.0.0-SNAPSHOT"]]
+                           [gorillalabs/sparkling "2.0.0"]]
 
             :aot [#".*" sparkling.serialization sparkling.destructuring]
             :main tf-idf.core
